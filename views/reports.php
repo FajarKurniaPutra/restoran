@@ -9,6 +9,12 @@ if (!isset($_SESSION['user_logged_in'])) {
 require_once '../models/ReportModel.php';
 $model = new ReportModel();
 
+if (isset($_POST['trigger_refresh'])) {
+    $model->refreshMaterializedView();
+    $msg = "Data Analisis Berhasil Di-refresh dari Database!";
+    $msgClass = "alert-success";
+}
+
 $pageMenu = isset($_GET['page_menu']) ? (int)$_GET['page_menu'] : 1;
 if ($pageMenu < 1) $pageMenu = 1;
 $limitMenu = 5; 
@@ -88,6 +94,13 @@ $pagingDetail = $detailResult['pagination'];
                 <div class="tab-content">
                     
                     <div class="tab-pane fade show active" id="tab-menu">
+                        <div class="d-flex justify-content-end mb-3">
+                            <form method="POST">
+                                <button type="submit" name="trigger_refresh" class="btn btn-warning fw-bold text-dark">
+                                    <i class="fa fa-sync-alt me-2"></i> Refresh Analisis Data
+                                </button>
+                            </form>
+                        </div>
                         <div class="row g-4">
                             <div class="col-lg-6">
                                 <div class="card card-report h-100">

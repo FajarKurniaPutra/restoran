@@ -9,30 +9,27 @@ class ReportModel {
     }
 
     public function getTopMenuChart() {
-        $query = "SELECT m.nama_menu, SUM(dp.jumlah) as total_terjual 
-                FROM detail_pesanan dp
-                JOIN menu m ON dp.menu_id = m.id
-                GROUP BY m.nama_menu 
+        $query = "SELECT nama_menu, total_terjual 
+                FROM mv_analisis_menu_laris 
                 ORDER BY total_terjual DESC LIMIT 10";
         return pg_fetch_all(pg_query($this->db->conn, $query)) ?: [];
+    }
+
+    public function refreshMaterializedView() {
+        return pg_query($this->db->conn, "REFRESH MATERIALIZED VIEW mv_analisis_menu_laris");
     }
 
     public function getMenuPerformance($page = 1, $limit = 5) {
         $offset = ($page - 1) * $limit;
 
-        $queryData = "SELECT m.nama_menu, 
-                            SUM(dp.jumlah) as total_terjual, 
-                            SUM(dp.subtotal) as total_pendapatan 
-                    FROM detail_pesanan dp
-                    JOIN menu m ON dp.menu_id = m.id
-                    GROUP BY m.nama_menu 
+        $queryData = "SELECT nama_menu, total_terjual, total_pendapatan 
+                    FROM mv_analisis_menu_laris 
                     ORDER BY total_terjual DESC 
                     LIMIT $1 OFFSET $2";
         
         $resData = pg_query_params($this->db->conn, $queryData, [$limit, $offset]);
 
-        $queryCount = "SELECT COUNT(DISTINCT menu_id) FROM detail_pesanan";
-        $resCount = pg_query($this->db->conn, $queryCount);
+        $resCount = pg_query($this->db->conn, "SELECT COUNT(*) FROM mv_analisis_menu_laris");
         $totalRows = pg_fetch_result($resCount, 0, 0);
 
         return [

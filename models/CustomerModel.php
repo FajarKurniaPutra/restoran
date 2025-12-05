@@ -8,9 +8,19 @@ class CustomerModel {
         $this->db = new Database();
     }
 
-    public function getAllCustomers() {
-        $query = "SELECT * FROM pelanggan WHERE deleted_at IS NULL ORDER BY created_at DESC";
-        $result = pg_query($this->db->conn, $query);
+    public function getAllCustomers($search = '') {
+        if (!empty($search)) {
+            $query = "SELECT * FROM pelanggan 
+                    WHERE deleted_at IS NULL 
+                    AND (nama_pelanggan ILIKE $1 OR no_telepon ILIKE $1) 
+                    ORDER BY nama_pelanggan ASC";
+            
+            $result = pg_query_params($this->db->conn, $query, ["%{$search}%"]);
+        } else {
+            $query = "SELECT * FROM pelanggan WHERE deleted_at IS NULL ORDER BY nama_pelanggan ASC";
+            $result = pg_query($this->db->conn, $query);
+        }
+
         return pg_fetch_all($result) ?: [];
     }
 

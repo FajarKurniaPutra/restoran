@@ -1,5 +1,4 @@
 <?php
-
 session_start();
 
 if (!isset($_SESSION['user_logged_in'])) {
@@ -34,7 +33,8 @@ if (isset($_GET['delete_id'])) {
     }
 }
 
-$customers = $model->getAllCustomers();
+$search = $_GET['search'] ?? '';
+$customers = $model->getAllCustomers($search);
 ?>
 
 <!DOCTYPE html>
@@ -63,6 +63,16 @@ $customers = $model->getAllCustomers();
                     </button>
                 </div>
                 <div class="card-body">
+                    <form method="GET" class="row g-2 mb-4 justify-content-center">
+                        <div class="col-md-6"> <div class="input-group">
+                                <input type="text" name="search" class="form-control" placeholder="Cari nama atau no. telepon..." value="<?= htmlspecialchars($search) ?>">
+                                <button class="btn btn-dark" type="submit"><i class="fa fa-search"></i> Cari</button>
+                                <?php if(!empty($search)): ?>
+                                    <a href="customers.php" class="btn btn-outline-secondary" title="Reset Search"><i class="fa fa-times"></i></a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </form>
                     <div class="table-responsive">
                         <table class="table table-hover align-middle table-striped">
                             <thead class="table-light">
@@ -76,7 +86,13 @@ $customers = $model->getAllCustomers();
                             </thead>
                             <tbody>
                                 <?php if(empty($customers)): ?>
-                                    <tr><td colspan="5" class="text-center py-4 text-muted">Belum ada data pelanggan.</td></tr>
+                                    <tr><td colspan="5" class="text-center py-4 text-muted">
+                                        <?php if(!empty($search)): ?>
+                                            Data tidak ditemukan untuk kata kunci: "<strong><?= htmlspecialchars($search) ?></strong>"
+                                        <?php else: ?>
+                                            Belum ada data pelanggan.
+                                        <?php endif; ?>
+                                    </td></tr>
                                 <?php else: ?>
                                     <?php foreach($customers as $key => $c): ?>
                                     <tr>

@@ -1,80 +1,113 @@
 <?php
 require_once '../config/koneksi.php';
 
+date_default_timezone_set('Asia/Jakarta');
+
 class MejaModel {
     private $db;
-    
+
     public function __construct() {
         $this->db = new Database();
     }
-    
-    public function create($nomor_meja, $kapasitas, $status_meja = 'Kosong') {
-        $query = "INSERT INTO meja (nomor_meja, kapasitas, status_meja) VALUES ($1, $2, $3)";
-        return pg_query_params($this->db->conn, $query, array($nomor_meja, $kapasitas, $status_meja));
-    }
-    
-    public function update($id_meja, $nomor_meja, $kapasitas, $status_meja) {
-        $query = "UPDATE meja SET nomor_meja = $1, kapasitas = $2, status_meja = $3 WHERE id_meja = $4";
-        return pg_query_params($this->db->conn, $query, array($nomor_meja, $kapasitas, $status_meja, $id_meja));
+
+    public function create($nomor, $kapasitas) {
+        return pg_query_params($this->db->conn, 
+            "INSERT INTO meja (nomor_meja, kapasitas, status) VALUES ($1, $2, 'kosong')", 
+            [$nomor, $kapasitas]);
     }
 
-    public function delete($id_meja) {
-        $queryReservasi = "DELETE FROM reservasi WHERE id_meja = $1";
-        pg_query_params($this->db->conn, $queryReservasi, array($id_meja));
-
-        $queryMeja = "DELETE FROM meja WHERE id_meja = $1";
-        return pg_query_params($this->db->conn, $queryMeja, array($id_meja));
+    public function update($id, $nomor, $kapasitas, $status) {
+        return pg_query_params($this->db->conn, 
+            "UPDATE meja SET nomor_meja=$1, kapasitas=$2, status=$3 WHERE id=$4", 
+            [$nomor, $kapasitas, $status, $id]);
     }
-    // --------------------------------------------------
-    
-    public function getStatusMejaLengkap($minKapasitas = 0) {
-        $currentDate = date('Y-m-d');
-        $currentTime = date('H:i:s');
-        $query = "SELECT m.id_meja, m.nomor_meja, m.kapasitas, m.status_meja as status_manual, r.jam_mulai as res_mulai, r.jam_selesai as res_selesai, r.tanggal_reservasi as res_tanggal, CASE WHEN r.id_reservasi IS NOT NULL THEN 'Reserved' ELSE 'Available' END as status_reservasi FROM meja m LEFT JOIN reservasi r ON m.id_meja = r.id_meja AND r.tanggal_reservasi = $1 AND r.jam_mulai <= $2 AND r.jam_selesai >= $2 AND r.status_reservasi != 'batal' WHERE m.kapasitas >= $3 ORDER BY m.nomor_meja ASC";
-        $result = pg_query_params($this->db->conn, $query, array($currentDate, $currentTime, $minKapasitas));
-        $data = [];
-        while ($row = pg_fetch_assoc($result)) {
-            if ($row['status_manual'] == 'Penuh') {
-                $row['status_final'] = 'Penuh (Manual)'; $row['css_class'] = 'status-penuh-manual'; $row['info_waktu'] = '';
-            } elseif ($row['status_reservasi'] == 'Reserved') {
-                $row['status_final'] = 'Dipesan'; $row['css_class'] = 'status-dipakai bg-warning text-dark'; 
-                $row['info_waktu'] = date('H:i', strtotime($row['res_mulai'])) . " - " . date('H:i', strtotime($row['res_selesai']));
-            } else {
-                $row['status_final'] = 'Kosong'; $row['css_class'] = 'status-tersedia'; $row['info_waktu'] = '';
-            }
-            $data[] = $row;
+
+    public function delete($id) {
+        return pg_query_params($this->db->conn, "DELETE FROM meja WHERE id=$1", [$id]);
+    }
+
+    public function getMejaWithStatus($tanggal, $jam) {
+        $query = "SELECT m.*, 
+                    (
+                        SELECT p.nama_pelanggan 
+                        FROM reservasi r 
+                        LEFT JOIN pelanggan p ON r.pelanggan_id = p.id
+                        WHERE r.meja_id = m.id 
+                        AND r.status = 'aktif' 
+                        AND r.tanggal_reservasi = $1
+                        AND r.jam_reservasi >= ($2::time - INTERVAL '2 hours')
+                        AND r.jam_reservasi <= ($2::time + INTERVAL '2 hours')
+                        LIMIT 1
+                    ) as reserved_by
+                FROM meja m
+                ORDER BY length(m.nomor_meja), m.nomor_meja";
+
+        $result = pg_query_params($this->db->conn, $query, [$tanggal, $jam]);
+        return pg_fetch_all($result) ?: [];
+    }
+
+    public function findOrCreatePelanggan($nama, $telp) {
+        $cek = pg_query_params($this->db->conn, "SELECT id FROM pelanggan WHERE no_telepon = $1 LIMIT 1", [$telp]);
+        if (pg_num_rows($cek) > 0) {
+            return pg_fetch_result($cek, 0, 0);
+        } else {
+            $insert = pg_query_params($this->db->conn, "INSERT INTO pelanggan (nama_pelanggan, no_telepon) VALUES ($1, $2) RETURNING id", [$nama, $telp]);
+            return pg_fetch_result($insert, 0, 0);
         }
-        return $data;
     }
-    public function findOrCreatePelanggan($nama, $no_hp) {
-        $checkQuery = "SELECT id_pelanggan FROM pelanggan WHERE no_hp = $1";
-        $checkResult = pg_query_params($this->db->conn, $checkQuery, array($no_hp));
-        if (pg_num_rows($checkResult) > 0) { $row = pg_fetch_assoc($checkResult); return $row['id_pelanggan']; }
-        else { $insertQuery = "INSERT INTO pelanggan (nama_pelanggan, no_hp, tanggal_daftar) VALUES ($1, $2, NOW()) RETURNING id_pelanggan"; $insertResult = pg_query_params($this->db->conn, $insertQuery, array($nama, $no_hp)); $row = pg_fetch_assoc($insertResult); return $row['id_pelanggan']; }
+
+    public function getAllPelanggan() {
+        $res = pg_query($this->db->conn, "SELECT id, nama_pelanggan, no_telepon FROM pelanggan ORDER BY nama_pelanggan ASC");
+        return pg_fetch_all($res) ?: [];
     }
-    public function reservasiBaru($nama_pelanggan, $no_hp, $id_meja, $tanggal, $jam_mulai, $durasi_jam) {
-        $id_pelanggan = $this->findOrCreatePelanggan($nama_pelanggan, $no_hp);
-        $startTime = strtotime($jam_mulai);
-        $endTimeStr = date("H:i", strtotime("+$durasi_jam hours", $startTime));
-        $checkQuery = "SELECT id_reservasi FROM reservasi WHERE id_meja = $1 AND tanggal_reservasi = $2 AND status_reservasi != 'batal' AND (jam_mulai < $3 AND jam_selesai > $4)";
-        $checkResult = pg_query_params($this->db->conn, $checkQuery, array($id_meja, $tanggal, $endTimeStr, $jam_mulai));
-        if (pg_num_rows($checkResult) > 0) { return "BENTROK"; }
-        $query = "INSERT INTO reservasi (id_pelanggan, id_meja, tanggal_reservasi, jam_mulai, jam_selesai, status_reservasi) VALUES ($1, $2, $3, $4, $5, 'dipesan')";
-        $result = pg_query_params($this->db->conn, $query, array($id_pelanggan, $id_meja, $tanggal, $jam_mulai, $endTimeStr));
-        return $result ? "SUKSES" : "GAGAL";
+
+    public function addReservasi($data) {
+        $cekFisik = pg_query_params($this->db->conn, "SELECT status FROM meja WHERE id = $1", [$data['meja_id']]);
+        $statusSaatIni = pg_fetch_result($cekFisik, 0, 0);
+
+        if ($statusSaatIni !== 'kosong') {
+            return "MEJA_TIDAK_AVAILABLE"; 
+        }
+
+        $cekJadwal = pg_query_params($this->db->conn, 
+            "SELECT id FROM reservasi 
+            WHERE meja_id = $1 
+            AND tanggal_reservasi = $2 
+            AND status = 'aktif'
+            AND jam_reservasi BETWEEN ($3::time - INTERVAL '1 hours 59 minutes') AND ($3::time + INTERVAL '1 hours 59 minutes')",
+            [$data['meja_id'], $data['tanggal'], $data['jam']]
+        );
+
+        if (pg_num_rows($cekJadwal) > 0) return "BENTROK";
+
+        $pelanggan_id = $this->findOrCreatePelanggan($data['nama'], $data['telp']);
+        $query = "INSERT INTO reservasi (meja_id, pelanggan_id, tanggal_reservasi, jam_reservasi, status) VALUES ($1, $2, $3, $4, 'aktif')";
+        return pg_query_params($this->db->conn, $query, [$data['meja_id'], $pelanggan_id, $data['tanggal'], $data['jam']]);
     }
-    public function cancelReservasi($id_reservasi) {
-        $query = "UPDATE reservasi SET status_reservasi = 'batal' WHERE id_reservasi = $1";
-        return pg_query_params($this->db->conn, $query, array($id_reservasi));
+
+    public function getUpcomingReservations() {
+        $query = "SELECT r.*, m.nomor_meja, p.nama_pelanggan, p.no_telepon 
+                FROM reservasi r 
+                LEFT JOIN meja m ON r.meja_id = m.id 
+                LEFT JOIN pelanggan p ON r.pelanggan_id = p.id
+                WHERE r.status = 'aktif' 
+                ORDER BY r.tanggal_reservasi ASC, r.jam_reservasi ASC 
+                LIMIT 20";
+        return pg_fetch_all(pg_query($this->db->conn, $query)) ?: [];
     }
-    public function getHistoryReservasi($sortOrder = 'DESC', $filterDate = '') {
-        $params = [];
-        $query = "SELECT r.*, m.nomor_meja, p.nama_pelanggan, p.no_hp FROM reservasi r JOIN meja m ON r.id_meja = m.id_meja LEFT JOIN pelanggan p ON r.id_pelanggan = p.id_pelanggan WHERE r.status_reservasi != 'batal' ";
-        if (!empty($filterDate)) { $query .= " AND r.tanggal_reservasi = $1"; $params[] = $filterDate; }
-        $sort = ($sortOrder === 'ASC') ? 'ASC' : 'DESC';
-        $query .= " ORDER BY r.tanggal_reservasi $sort, r.jam_mulai $sort";
-        $result = pg_query_params($this->db->conn, $query, $params);
-        $data = []; while ($row = pg_fetch_assoc($result)) { $data[] = $row; } return $data;
+
+    public function getHistoryReservasi() {
+        $query = "SELECT r.*, m.nomor_meja, p.nama_pelanggan, p.no_telepon 
+                FROM reservasi r 
+                LEFT JOIN meja m ON r.meja_id = m.id 
+                LEFT JOIN pelanggan p ON r.pelanggan_id = p.id
+                ORDER BY r.tanggal_reservasi DESC, r.jam_reservasi DESC 
+                LIMIT 50";
+        return pg_fetch_all(pg_query($this->db->conn, $query)) ?: [];
+    }
+
+    public function cancelReservasi($id) {
+        return pg_query_params($this->db->conn, "UPDATE reservasi SET status='batal' WHERE id=$1 AND status != 'selesai'", [$id]);
     }
 }
 ?>

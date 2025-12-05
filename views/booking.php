@@ -1,207 +1,274 @@
 <?php
-session_start(); 
-require_once '../models/mejaModel.php';
+session_start();
+
+if (!isset($_SESSION['user_logged_in'])) {
+    header("Location: login.php");
+    exit;
+}
+
+require_once '../models/MejaModel.php';
 $model = new MejaModel();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
-        $action = $_POST['action'];
-
-        if ($action === 'tambah_meja') {
-            $res = $model->create($_POST['nomor_meja'], $_POST['kapasitas'], 'Kosong');
-            $_SESSION['notif'] = $res ? "Meja berhasil DITAMBAHKAN!" : "Gagal menambah meja.";
-        } 
-        elseif ($action === 'edit_meja') {
-            $res = $model->update($_POST['id_meja'], $_POST['nomor_meja'], $_POST['kapasitas'], $_POST['status_meja']);
-            $_SESSION['notif'] = $res ? "Meja berhasil DIUPDATE!" : "Gagal update meja.";
+    if (isset($_POST['action']) && $_POST['action'] === 'save_meja') {
+        $id = $_POST['id_meja'];
+        if (empty($id)) {
+            $model->create($_POST['nomor'], $_POST['kapasitas']);
+            $_SESSION['notif'] = "Meja Ditambahkan!";
+        } else {
+            $model->update($id, $_POST['nomor'], $_POST['kapasitas'], $_POST['status']);
+            $_SESSION['notif'] = "Meja Diupdate!";
         }
-        elseif ($action === 'reservasi') {
-            $nama = $_POST['nama_pelanggan'];
-            $no_hp = $_POST['no_hp'];
-            $id_meja = $_POST['id_meja'];
-            $tanggal = $_POST['tanggal_reservasi'];
-            $jam = $_POST['jam_mulai'];
-            $durasi = $_POST['durasi'];
+        header("Location: booking.php"); exit;
+    }
 
-            $hasil = $model->reservasiBaru($nama, $no_hp, $id_meja, $tanggal, $jam, $durasi);
-            
-            if ($hasil === "BENTROK") {
-                $_SESSION['notif'] = "Gagal! Meja tersebut sudah dipesan pada jam yang sama.";
-            } elseif ($hasil === "SUKSES") {
-                $_SESSION['notif'] = "Reservasi Berhasil dibuat!";
-            } else {
-                $_SESSION['notif'] = "Terjadi kesalahan sistem.";
-            }
-        }
+    if (isset($_POST['action']) && $_POST['action'] === 'add_reservasi') {
+        $data = [
+            'meja_id' => $_POST['meja_id'],
+            'nama' => $_POST['nama'],
+            'telp' => $_POST['telp'],
+            'tanggal' => $_POST['tanggal'],
+            'jam' => $_POST['jam']
+        ];
         
-        header("Location: booking.php");
-        exit;
+        $res = $model->addReservasi($data);
+        
+        if ($res === "BENTROK") {
+            $_SESSION['notif'] = "GAGAL: Jam tersebut bentrok dengan reservasi lain!";
+        } elseif ($res === "MEJA_TIDAK_AVAILABLE") {
+            $_SESSION['notif'] = "GAGAL: Meja sedang dipakai (Status: Terisi). Mohon kosongkan meja terlebih dahulu.";
+        } else {
+            $_SESSION['notif'] = "Reservasi Berhasil Disimpan!";
+        }
+        header("Location: booking.php"); exit;
     }
 }
 
 if (isset($_GET['action'])) {
-    if ($_GET['action'] === 'delete_meja' && isset($_GET['id'])) {
+    if ($_GET['action'] == 'delete_meja') {
         $model->delete($_GET['id']);
-        $_SESSION['notif'] = "Meja beserta riwayat reservasinya berhasil DIHAPUS!";
-        header("Location: booking.php");
-        exit;
+        $_SESSION['notif'] = "Meja dihapus.";
     }
-    if ($_GET['action'] === 'cancel_reservasi' && isset($_GET['id'])) {
+    if ($_GET['action'] == 'cancel_res') {
         $model->cancelReservasi($_GET['id']);
-        $_SESSION['notif'] = "Reservasi berhasil DIBATALKAN.";
-        header("Location: booking.php");
-        exit;
+        $_SESSION['notif'] = "Reservasi Dibatalkan.";
     }
+    header("Location: booking.php"); exit;
 }
 
-// ... (Pengambilan Data untuk View) ...
-$filterKapasitas = isset($_GET['filter_kapasitas']) ? (int)$_GET['filter_kapasitas'] : 0;
-$dataMeja = $model->getStatusMejaLengkap($filterKapasitas);
+$f_tanggal = $_GET['tanggal'] ?? date('Y-m-d');
+$f_jam = $_GET['jam'] ?? date('H:i');
 
-$filterDate = isset($_GET['filter_date']) ? $_GET['filter_date'] : '';
-$sortOrder = isset($_GET['sort_order']) ? $_GET['sort_order'] : 'DESC';
-$dataReservasi = $model->getHistoryReservasi($sortOrder, $filterDate);
+$mejaList = $model->getMejaWithStatus($f_tanggal, $f_jam);
+$upcomingList = $model->getUpcomingReservations();
+$historyList = $model->getHistoryReservasi();
+$pelangganList = $model->getAllPelanggan();
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Booking & Manajemen Meja</title>
+    <title>Manajemen Meja</title>
     <?php include "header.php"; ?>
-    
     <style>
-        .card-meja { border: none; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s; margin-bottom: 20px; overflow: hidden; }
-        .card-meja:hover { transform: translateY(-5px); }
-        .status-badge { position: absolute; top: 10px; right: 10px; padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; color: white; text-transform: uppercase; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-        .status-tersedia { background-color: #198754; } 
-        .status-dipakai { background-color: #ffc107; color: #000 !important; } 
-        .status-penuh-manual { background-color: #dc3545; }
-        .meja-number { font-size: 2rem; font-weight: 800; color: #333; }
-        .history-list-container { max-height: 600px; overflow-y: auto; }
-        .res-time-badge { background: rgba(255,255,255,0.8); padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; margin-top: 5px; display: inline-block; font-weight: bold; color: #000; }
+        .card-meja { transition: transform 0.2s; border: none; cursor: pointer; }
+        .card-meja:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .status-bar { height: 6px; width: 100%; }
+        .bg-vacant { background-color: #198754; } 
+        .bg-occupied { background-color: #dc3545; } 
+        .bg-reserved { background-color: #ffc107; } 
+        .meja-num { font-size: 2.5rem; font-weight: 800; color: #333; }
+        .scrollable-list { max-height: 400px; overflow-y: auto; }
+        /* Disabled card style */
+        .card-disabled { opacity: 0.7; background-color: #f8f9fa; }
     </style>
 </head>
-
 <body>
     <div class="container-fluid bg-white p-0">
         <?php include "navbar.php"; ?>
         
         <div class="container-fluid py-5 bg-dark hero-header mb-5">
             <div class="container text-center my-5 pt-5 pb-4">
-                <h1 class="display-3 text-white mb-3">Manajemen Meja</h1>
+                <h1 class="display-3 text-white mb-3">Table & Booking</h1>
+                <nav aria-label="breadcrumb"><ol class="breadcrumb justify-content-center text-uppercase"><li class="breadcrumb-item text-white">Home</li><li class="breadcrumb-item text-white active">Booking</li></ol></nav>
             </div>
         </div>
 
         <div class="container-fluid py-3">
             <div class="container">
                 
-                <div class="row mb-4">
-                    <div class="col-12 bg-light p-3 rounded d-flex flex-wrap justify-content-between align-items-center gap-3">
-                        <div class="d-flex align-items-center gap-2">
-                            <h4 class="mb-0 text-primary me-3">Control Panel</h4>
-                            <form method="GET" class="d-flex align-items-center">
-                                <input type="number" name="filter_kapasitas" class="form-control me-2" placeholder="Min. Kapasitas" value="<?php echo $filterKapasitas > 0 ? $filterKapasitas : ''; ?>" style="width: 150px;">
-                                <button type="submit" class="btn btn-secondary"><i class="fa fa-filter"></i> Cari</button>
-                            </form>
-                        </div>
-                        <div>
-                            <button class="btn btn-outline-primary me-2" data-bs-toggle="modal" data-bs-target="#modalReservasi">
-                                <i class="fa fa-calendar-plus me-2"></i>Reservasi Baru
-                            </button>
-                            <button class="btn btn-primary" onclick="showTambahMeja()"><i class="fa fa-plus me-2"></i>Tambah Meja</button>
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body bg-light">
+                        <div class="row align-items-end g-2">
+                            <div class="col-md-5">
+                                <label class="small fw-bold text-muted">Cek Ketersediaan:</label>
+                                <form method="GET" class="d-flex gap-2">
+                                    <input type="date" name="tanggal" class="form-control" value="<?= $f_tanggal ?>">
+                                    <input type="time" name="jam" class="form-control" value="<?= $f_jam ?>">
+                                    <button class="btn btn-primary"><i class="fa fa-search"></i></button>
+                                </form>
+                            </div>
+                            <div class="col-md-7 text-md-end mt-3 mt-md-0">
+                                <div class="text-muted small mb-2 d-inline-block me-3">
+                                    <i class="fa fa-circle text-success"></i> Available
+                                    <i class="fa fa-circle text-warning ms-2"></i> Booked
+                                    <i class="fa fa-circle text-danger ms-2"></i> Dipakai
+                                </div>
+                                <button class="btn btn-outline-secondary me-1" onclick="modalHistory()">History</button>
+                                <button class="btn btn-outline-dark me-1" onclick="modalMeja()">+ Meja</button>
+                                <button class="btn btn-primary" onclick="modalRes()">+ Booking</button>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="row g-4">
-                    <div class="col-lg-4">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header bg-dark text-white"><h5 class="mb-0 text-white"><i class="fa fa-history me-2"></i>Jadwal Aktif</h5></div>
-                            <div class="card-body">
-                                <form method="GET" class="row g-2 mb-3">
-                                    <div class="col-md-6"><input type="date" class="form-control form-control-sm" name="filter_date" value="<?php echo $filterDate; ?>"></div>
-                                    <div class="col-md-4"><select class="form-select form-select-sm" name="sort_order">
-                                        <option value="DESC" <?php echo $sortOrder == 'DESC' ? 'selected' : ''; ?>>Terbaru</option>
-                                        <option value="ASC" <?php echo $sortOrder == 'ASC' ? 'selected' : ''; ?>>Terlama</option></select>
-                                    </div>
-                                    <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100"><i class="fa fa-search"></i></button></div>
-                                </form>
-
-                                <div class="history-list-container">
-                                    <?php if (empty($dataReservasi)): ?>
-                                        <div class="text-center text-muted py-4"><small>Tidak ada jadwal reservasi aktif.</small></div>
-                                    <?php else: ?>
-                                        <?php foreach ($dataReservasi as $res): ?>
-                                            <div class="border-bottom pb-2 mb-2 position-relative">
-                                                <div class="d-flex justify-content-between align-items-start">
-                                                    <div>
-                                                        <strong><?php echo htmlspecialchars($res['nama_pelanggan']); ?></strong><br>
-                                                        <span class="badge bg-primary">Meja <?php echo $res['nomor_meja']; ?></span>
-                                                    </div>
-                                                    <a href="booking.php?action=cancel_reservasi&id=<?php echo $res['id_reservasi']; ?>" 
-                                                        class="btn btn-xs btn-outline-danger btn-sm"
-                                                        onclick="return confirm('Apakah anda yakin ingin membatalkan reservasi pelanggan <?php echo htmlspecialchars($res['nama_pelanggan']); ?>?');"
-                                                        title="Cancel Reservasi"><i class="fa fa-times"></i></a>
-                                                </div>
-                                                <small class="text-muted d-block mt-1"><i class="fa fa-phone me-1"></i> <?php echo htmlspecialchars($res['no_hp']); ?></small>
-                                                <small class="text-dark fw-bold">
-                                                    <i class="fa fa-clock me-1"></i> 
-                                                    <?php echo date('d/m/Y', strtotime($res['tanggal_reservasi'])); ?> | <?php echo date('H:i', strtotime($res['jam_mulai'])); ?> - <?php echo date('H:i', strtotime($res['jam_selesai'])); ?>
-                                                </small>
-                                            </div>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <div class="col-lg-8">
-                        <div class="row g-3">
-                            <?php if(empty($dataMeja)): ?>
-                                <div class="col-12 text-center text-muted p-5"><h4>Tidak ada meja ditemukan.</h4></div>
-                            <?php endif; ?>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="text-primary m-0"><i class="fa fa-th-large me-2"></i>Status Meja</h4>
+                            <span class="badge bg-secondary">Per: <?= date('d M, H:i', strtotime("$f_tanggal $f_jam")) ?></span>
+                        </div>
 
-                            <?php foreach ($dataMeja as $meja): 
-                                $cardBg = ($meja['status_final'] === 'Kosong') ? 'bg-white' : 'bg-light';
+                        <div class="row g-3">
+                            <?php foreach($mejaList as $m): 
+                                $isDisabled = false;
+                                $cardClass = "";
+                                
+                                if ($m['status'] == 'terisi') {
+                                    $col='bg-occupied'; $txt='DIPAKAI'; $tCol='text-danger'; 
+                                    $isDisabled = true; $cardClass = "card-disabled";
+                                } elseif (!empty($m['reserved_by'])) {
+                                    $col='bg-reserved'; $txt='BOOKED: '.explode(' ',$m['reserved_by'])[0]; $tCol='text-warning'; 
+                                    $isDisabled = true;
+                                } else {
+                                    $col='bg-vacant'; $txt='AVAILABLE'; $tCol='text-success'; 
+                                }
                             ?>
                             <div class="col-md-6 col-lg-4">
-                                <div class="card card-meja <?php echo $cardBg; ?> position-relative">
-                                    <div class="<?php echo $meja['css_class']; ?> status-badge"><?php echo $meja['status_final']; ?></div>
-                                    <div class="card-body text-center pt-5">
-                                        <h6 class="text-muted text-uppercase">Nomor Meja</h6>
-                                        <div class="meja-number"><?php echo $meja['nomor_meja']; ?></div>
-                                        <p class="text-muted mb-2">Kapasitas: <?php echo $meja['kapasitas']; ?> Orang</p>
-                                        
-                                        <?php if (!empty($meja['info_waktu'])): ?>
-                                            <div class="mb-3">
-                                                <div class="res-time-badge border border-warning bg-warning">
-                                                    <i class="fa fa-clock"></i> <?php echo $meja['info_waktu']; ?>
-                                                </div>
-                                            </div>
-                                        <?php else: ?>
-                                            <div class="mb-4"></div>
-                                        <?php endif; ?>
-                                        
-                                        <div class="d-flex justify-content-center gap-2">
-                                            <button class="btn btn-sm btn-outline-warning" onclick="showEditMeja(
-                                                '<?php echo $meja['id_meja']; ?>',
-                                                '<?php echo $meja['nomor_meja']; ?>',
-                                                '<?php echo $meja['kapasitas']; ?>',
-                                                '<?php echo $meja['status_manual']; ?>')">
-                                                <i class="fa fa-edit"></i>
-                                            </button>
-                                            
-                                            <a href="booking.php?action=delete_meja&id=<?php echo $meja['id_meja']; ?>" 
-                                                class="btn btn-sm btn-outline-danger"
-                                                onclick="return confirm('PERINGATAN KERAS!\n\nAnda akan menghapus Meja No. <?php echo $meja['nomor_meja']; ?>.\n\nJika meja ini memiliki riwayat RESERVASI, data reservasi tersebut JUGA AKAN DIHAPUS agar tidak terjadi error.\n\nApakah Anda yakin ingin melanjutkan penghapusan permanen ini?');">
-                                                <i class="fa fa-trash"></i>
-                                            </a>
+                                <div class="card card-meja shadow-sm h-100 <?= $cardClass ?>">
+                                    <div class="status-bar <?= $col ?>"></div>
+                                    <div class="card-body text-center position-relative">
+                                        <div class="position-absolute top-0 end-0 p-2">
+                                            <a href="#" class="text-muted small" onclick='editMeja(<?= json_encode($m) ?>)'><i class="fa fa-cog"></i></a>
                                         </div>
+                                        
+                                        <small class="fw-bold <?= $tCol ?>"><?= $txt ?></small>
+                                        <div class="meja-num my-2"><?= $m['nomor_meja'] ?></div>
+                                        <div class="text-muted small mb-3"><i class="fa fa-users"></i> Max <?= $m['kapasitas'] ?></div>
+                                        
+                                        <?php if(!$isDisabled): ?>
+                                            <button class="btn btn-sm btn-outline-primary w-100" onclick="bookSpecificMeja('<?= $m['id'] ?>')">Book This</button>
+                                        <?php else: ?>
+                                            <button class="btn btn-sm btn-light text-muted w-100" disabled>Tidak Tersedia</button>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
                             <?php endforeach; ?>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="card shadow border-0 h-100">
+                            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0 text-white"><i class="fa fa-clock me-2"></i>Jadwal Aktif</h5>
+                            </div>
+                            <div class="list-group list-group-flush scrollable-list">
+                                <?php if(empty($upcomingList)): ?>
+                                    <div class="p-4 text-center text-muted">
+                                        <i class="fa fa-mug-hot fa-3x mb-3 text-light"></i><br>
+                                        Tidak ada reservasi aktif saat ini.
+                                    </div>
+                                <?php else: foreach($upcomingList as $r): ?>
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between">
+                                            <div>
+                                                <h6 class="mb-0 fw-bold"><?= htmlspecialchars($r['nama_pelanggan']) ?></h6>
+                                                <small class="text-muted"><?= $r['no_telepon'] ?></small>
+                                            </div>
+                                            <span class="badge bg-primary align-self-start">Meja <?= $r['nomor_meja'] ?></span>
+                                        </div>
+                                        <div class="d-flex justify-content-between mt-2 align-items-center bg-light p-2 rounded">
+                                            <small class="fw-bold text-dark">
+                                                <i class="fa fa-calendar-alt me-1"></i>
+                                                <?= date('d M - H:i', strtotime($r['tanggal_reservasi'].' '.$r['jam_reservasi'])) ?>
+                                            </small>
+                                            <a href="?action=cancel_res&id=<?= $r['id'] ?>" onclick="return confirm('Yakin ingin membatalkan reservasi <?= htmlspecialchars($r['nama_pelanggan']) ?>?')" class="btn btn-sm btn-danger py-0" style="font-size: 0.75rem;">Batal</a>
+                                        </div>
+                                    </div>
+                                <?php endforeach; endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalRes" tabindex="-1">
+            <div class="modal-dialog">
+                <form method="POST" class="modal-content">
+                    <div class="modal-header bg-primary text-white"><h5 class="modal-title">Buat Booking</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <input type="hidden" name="action" value="add_reservasi">
+                        
+                        <div class="mb-3"><label class="fw-bold">Pilih Meja</label>
+                            <select name="meja_id" id="res_meja_id" class="form-select" required>
+                                <option value="">-- Pilih --</option>
+                                <?php foreach($mejaList as $m): 
+                                    if($m['status'] == 'kosong'): ?>
+                                    <option value="<?= $m['id'] ?>">Meja <?= $m['nomor_meja'] ?> (Max <?= $m['kapasitas'] ?>)</option>
+                                <?php endif; endforeach; ?>
+                            </select>
+                            <small class="text-muted">* Meja berstatus 'Terisi' tidak muncul disini</small>
+                        </div>
+                        
+                        <div class="mb-3 position-relative">
+                            <label class="fw-bold">Nama Pelanggan</label>
+                            <input type="text" name="nama" id="search_nama" class="form-control" list="list_pelanggan" placeholder="Ketik nama..." required autocomplete="off">
+                            <datalist id="list_pelanggan">
+                                <?php foreach($pelangganList as $p): ?>
+                                    <option value="<?= htmlspecialchars($p['nama_pelanggan']) ?>">
+                                <?php endforeach; ?>
+                            </datalist>
+                        </div>
+
+                        <div class="mb-3"><label class="fw-bold">No. Telepon</label><input type="text" name="telp" id="res_telp" class="form-control" required></div>
+                        <div class="row">
+                            <div class="col-6 mb-3"><label>Tanggal</label><input type="date" name="tanggal" class="form-control" value="<?= $f_tanggal ?>" required></div>
+                            <div class="col-6 mb-3"><label>Jam</label><input type="time" name="jam" class="form-control" value="<?= $f_jam ?>" required></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer"><button class="btn btn-success w-100">Simpan Reservasi</button></div>
+                </form>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalHistory" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-secondary text-white"><h5 class="modal-title">Riwayat Reservasi</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover small">
+                                <thead class="table-dark">
+                                    <tr><th>Tanggal</th><th>Jam</th><th>Pelanggan</th><th>Meja</th><th>Status</th></tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach($historyList as $h): ?>
+                                    <tr>
+                                        <td><?= date('d/m/Y', strtotime($h['tanggal_reservasi'])) ?></td>
+                                        <td><?= date('H:i', strtotime($h['jam_reservasi'])) ?></td>
+                                        <td><?= htmlspecialchars($h['nama_pelanggan']) ?><br><span class="text-muted"><?= $h['no_telepon'] ?></span></td>
+                                        <td><?= $h['nomor_meja'] ?></td>
+                                        <td>
+                                            <?php if($h['status']=='aktif'): ?><span class="badge bg-success">Aktif</span>
+                                            <?php elseif($h['status']=='batal'): ?><span class="badge bg-danger">Batal</span>
+                                            <?php else: ?><span class="badge bg-secondary"><?= $h['status'] ?></span><?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -209,60 +276,27 @@ $dataReservasi = $model->getHistoryReservasi($sortOrder, $filterDate);
         </div>
 
         <div class="modal fade" id="modalMeja" tabindex="-1">
-            <div class="modal-dialog"><div class="modal-content">
-                <div class="modal-header"><h5 class="modal-title" id="modalTitleMeja">Form Meja</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                <form method="POST"><div class="modal-body">
-                        <input type="hidden" name="action" id="action_meja" value="tambah_meja"><input type="hidden" name="id_meja" id="id_meja">
-                        <div class="mb-3"><label>Nomor Meja</label><input type="number" class="form-control" name="nomor_meja" id="nomor_meja" required></div>
-                        <div class="mb-3"><label>Kapasitas</label><input type="number" class="form-control" name="kapasitas" id="kapasitas" required></div>
-                        <div class="mb-3" id="div_status_meja"><label>Status Manual</label><select class="form-select" name="status_meja" id="status_meja">
-                            <option value="Kosong">Kosong (Available)</option>
-                            <option value="Penuh">Penuh (Rusak/Maintenance)</option>
-                        </select></div>
-                </div><div class="modal-footer"><button type="submit" class="btn btn-primary">Simpan</button></div></form>
-            </div></div>
-        </div>
-
-        <div class="modal fade" id="modalReservasi" tabindex="-1">
-            <div class="modal-dialog modal-lg"><div class="modal-content">
-                    <div class="modal-header bg-primary text-white"><h5 class="modal-title text-white">Buat Reservasi Baru</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
-                    <form method="POST"><div class="modal-body">
-                            <input type="hidden" name="action" value="reservasi">
-                            <h6 class="text-primary mb-3 border-bottom pb-2">1. Data Pelanggan</h6>
-                            <div class="row g-3 mb-4">
-                                <div class="col-md-6">
-                                    <label>Nama Pelanggan</label>
-                                    <input type="text" class="form-control" name="nama_pelanggan" required>
-                                </div><div class="col-md-6">
-                                    <label>Nomor HP</label>
-                                    <input type="text" class="form-control" name="no_hp" required>
-                                </div></div>
-                            <h6 class="text-primary mb-3 border-bottom pb-2">2. Detail Booking</h6>
-                            <div class="row g-3"><div class="col-md-6">
-                                <label>Pilih Meja</label>
-                                <select class="form-select" name="id_meja" required>
-                                    <option value="">-- Pilih Meja --</option>
-                                    <?php foreach ($dataMeja as $m): $disabled = ($m['status_final'] !== 'Kosong') ? 'disabled style="color:red;"' : ''; ?>
-                                    <option value="<?php echo $m['id_meja']; ?>" 
-                                        <?php echo $disabled; ?>>Meja <?php echo $m['nomor_meja']; ?> (<?php echo $m['kapasitas']; ?> org) - <?php echo $m['status_final']; ?>
-                                    </option>
-                                <?php endforeach; ?>
+            <div class="modal-dialog">
+                <form method="POST" class="modal-content">
+                    <div class="modal-header bg-dark text-white"><h5 class="modal-title" id="tMeja">Tambah Meja</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <input type="hidden" name="action" value="save_meja">
+                        <input type="hidden" name="id_meja" id="id_meja">
+                        <div class="mb-3"><label>Nomor</label><input type="text" name="nomor" id="nomor" class="form-control" required></div>
+                        <div class="mb-3"><label>Kapasitas</label><input type="number" name="kapasitas" id="kapasitas" class="form-control" required></div>
+                        <div class="mb-3">
+                            <label>Status (Walk-In)</label>
+                            <select name="status" id="status" class="form-select">
+                                <option value="kosong">Kosong (Available)</option>
+                                <option value="terisi">Terisi (Dipakai)</option>
                             </select>
+                            <small class="text-muted">Jika 'Terisi', meja tidak bisa dibooking online.</small>
                         </div>
-                        <div class="col-md-6">
-                            <label>Tanggal</label>
-                            <input type="date" class="form-control" name="tanggal_reservasi" required min="<?php echo date('Y-m-d'); ?>" value="<?php echo date('Y-m-d'); ?>">
-                        </div>
-                        <div class="col-md-6">
-                            <label>Jam</label>
-                            <input type="time" class="form-control" name="jam_mulai" required>
-                        </div><div class="col-md-6">
-                            <label>Durasi</label>
-                            <input type="number" class="form-control" name="durasi" value="1" min="1" max="5" required>
-                        </div>
+                        <div id="btnDel" class="d-none"><a href="#" id="linkDel" class="text-danger small" onclick="return confirm('Hapus?')">Hapus meja</a></div>
                     </div>
-                    </div><div class="modal-footer"><button type="submit" class="btn btn-success">Konfirmasi Booking</button></div></form>
-            </div></div>
+                    <div class="modal-footer"><button class="btn btn-primary">Simpan</button></div>
+                </form>
+            </div>
         </div>
 
         <?php include 'footer.php'; ?>
@@ -271,43 +305,52 @@ $dataReservasi = $model->getHistoryReservasi($sortOrder, $filterDate);
     <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="../js/main.js"></script>
-
+    
     <script>
-        function showTambahMeja() { 
-            document.getElementById('modalTitleMeja').innerText = "Tambah Meja Baru"; 
-            document.getElementById('action_meja').value = "tambah_meja"; 
-            document.getElementById('id_meja').value = ""; 
-            document.getElementById('nomor_meja').value = ""; 
-            document.getElementById('kapasitas').value = ""; 
-            
-            document.getElementById('div_status_meja').style.display = 'none';
-            document.getElementById('status_meja').value = "Kosong"; 
-            
-            var myModal = new bootstrap.Modal(document.getElementById('modalMeja')); 
-            myModal.show(); 
-        }
+        setInterval(function(){
+            if(!document.querySelector('.modal.show')) {
+                window.location.reload();
+            }
+        }, 60000); 
 
-        function showEditMeja(id, nomor, kapasitas, status) { 
-            document.getElementById('modalTitleMeja').innerText = "Edit Meja"; 
-            document.getElementById('action_meja').value = "edit_meja"; 
-            document.getElementById('id_meja').value = id; 
-            document.getElementById('nomor_meja').value = nomor; 
-            document.getElementById('kapasitas').value = kapasitas; 
-            
-            document.getElementById('div_status_meja').style.display = 'block';
-            document.getElementById('status_meja').value = status; 
-            
-            var myModal = new bootstrap.Modal(document.getElementById('modalMeja')); 
-            myModal.show(); 
-        }
-    </script>
+        var mMeja = new bootstrap.Modal(document.getElementById('modalMeja'));
+        var mRes = new bootstrap.Modal(document.getElementById('modalRes'));
+        var mHist = new bootstrap.Modal(document.getElementById('modalHistory'));
+        
+        const pelangganData = {};
+        <?php foreach($pelangganList as $p): ?>
+            pelangganData["<?= $p['nama_pelanggan'] ?>"] = "<?= $p['no_telepon'] ?>";
+        <?php endforeach; ?>
 
-    <?php if (isset($_SESSION['notif'])): ?>
-    <script>
-        alert("<?php echo $_SESSION['notif']; ?>");
+        document.getElementById('search_nama').addEventListener('input', function() {
+            if(pelangganData[this.value]) document.getElementById('res_telp').value = pelangganData[this.value];
+        });
+
+        function modalMeja() {
+            document.getElementById('tMeja').innerText = "Tambah Meja";
+            document.getElementById('id_meja').value = ""; document.getElementById('nomor').value = ""; document.getElementById('kapasitas').value = "";
+            document.getElementById('btnDel').classList.add('d-none');
+            mMeja.show();
+        }
+        function editMeja(d) {
+            document.getElementById('tMeja').innerText = "Edit Meja "+d.nomor_meja;
+            document.getElementById('id_meja').value = d.id; document.getElementById('nomor').value = d.nomor_meja; document.getElementById('kapasitas').value = d.kapasitas; document.getElementById('status').value = d.status;
+            document.getElementById('linkDel').href = "?action=delete_meja&id="+d.id;
+            document.getElementById('btnDel').classList.remove('d-none');
+            mMeja.show();
+        }
+        function modalRes() { document.getElementById('res_meja_id').value=""; document.getElementById('search_nama').value=""; document.getElementById('res_telp').value=""; mRes.show(); }
+        
+        function bookSpecificMeja(id) { 
+            document.getElementById('res_meja_id').value=id; 
+            mRes.show(); 
+        }
+        function modalHistory() { mHist.show(); }
     </script>
-    <?php unset($_SESSION['notif']); ?>
+    
+    <?php if(isset($_SESSION['notif'])): ?>
+        <script>alert("<?= $_SESSION['notif'] ?>"); </script>
+        <?php unset($_SESSION['notif']); ?>
     <?php endif; ?>
-
 </body>
 </html>

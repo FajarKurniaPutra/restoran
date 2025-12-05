@@ -1,10 +1,12 @@
 <?php
+date_default_timezone_set('Asia/Jakarta');
+
 class Database
 {
     private $host = "localhost";
     private $username = "postgres";
     private $password = "PWDpwd";
-    private $database = "db_restoran";
+    private $database = "db_restoran_remake";
     private $port = "5433";
     public $conn;
 

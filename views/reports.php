@@ -341,7 +341,6 @@ function buildUrl($key, $val) {
                                         <option value="">- Semua Status -</option>
                                         <option value="selesai" <?= $filterStatus=='selesai'?'selected':'' ?>>Selesai</option>
                                         <option value="pending" <?= $filterStatus=='pending'?'selected':'' ?>>Pending</option>
-                                        <option value="batal" <?= $filterStatus=='batal'?'selected':'' ?>>Batal</option>
                                     </select>
                                     
                                     <select name="sort_by" class="form-select form-select-sm w-auto">
@@ -388,8 +387,6 @@ function buildUrl($key, $val) {
                                             <td>
                                                 <?php if($l['status_order'] == 'selesai'): ?>
                                                     <span class="badge bg-success">Selesai</span>
-                                                <?php elseif($l['status_order'] == 'batal'): ?>
-                                                    <span class="badge bg-danger">Batal</span>
                                                 <?php else: ?>
                                                     <span class="badge bg-warning text-dark"><?= $l['status_order'] ?></span>
                                                 <?php endif; ?>

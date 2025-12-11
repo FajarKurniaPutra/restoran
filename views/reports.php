@@ -1,54 +1,5 @@
 <?php
-session_start();
-
-if (!isset($_SESSION['user_logged_in'])) {
-    header("Location: login.php");
-    exit;
-}
-
-require_once '../models/ReportModel.php';
-$model = new ReportModel();
-
-if (isset($_POST['trigger_refresh'])) {
-    $model->refreshMaterializedView();
-    $msg = "Data Analisis Berhasil Di-refresh dari Database!";
-}
-
-$pageMenu = isset($_GET['page_menu']) ? (int)$_GET['page_menu'] : 1;
-if ($pageMenu < 1) $pageMenu = 1;
-$filterKategori = isset($_GET['kategori']) ? $_GET['kategori'] : '';
-
-$chartData = $model->getTopMenuChart();
-$tableMenuData = $model->getMenuPerformance($pageMenu, 5, $filterKategori); 
-$listMenu = $tableMenuData['data'];
-$pagingMenu = $tableMenuData['pagination'];
-$listKategori = $model->getAllKategori(); 
-
-$labels = []; $dataVals = [];
-foreach($chartData as $row) {
-    $labels[] = $row['nama_menu'];
-    $dataVals[] = $row['total_terjual'];
-}
-
-$laporanShift = $model->getLaporanShift();
-$laporanServer = $model->getLaporanServer();
-
-$pageRes = isset($_GET['page_res']) ? (int)$_GET['page_res'] : 1;
-if ($pageRes < 1) $pageRes = 1;
-$resData = $model->getRiwayatReservasi($pageRes, 10);
-$listReservasi = $resData['data'];
-$pagingRes = $resData['pagination'];
-
-$pageDetail = isset($_GET['page_detail']) ? (int)$_GET['page_detail'] : 1;
-if ($pageDetail < 1) $pageDetail = 1;
-
-$sortCol = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'tanggal_pesanan';
-$sortDir = isset($_GET['order']) ? $_GET['order'] : 'DESC';
-$filterStatus = isset($_GET['status']) ? $_GET['status'] : '';
-
-$detailResult = $model->getLaporanPenjualan($pageDetail, 10, $filterStatus, $sortCol, $sortDir);
-$laporanDetail = $detailResult['data'];
-$pagingDetail = $detailResult['pagination'];
+require_once '../controllers/ReportController.php';
 
 function buildUrl($key, $val) {
     $params = $_GET;
@@ -91,6 +42,13 @@ function buildUrl($key, $val) {
         <div class="container-fluid py-3">
             <div class="container">
                 
+                <?php if(!empty($msg)): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="fa fa-check-circle me-2"></i><?= $msg ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
                 <ul class="nav nav-pills justify-content-center mb-5" id="reportTabs" role="tablist">
                     <li class="nav-item">
                         <button class="nav-link active px-4 py-2" data-bs-toggle="pill" data-bs-target="#tab-menu">

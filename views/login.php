@@ -1,34 +1,9 @@
 <?php
-session_start();
-require_once '../models/UserModel.php';
-$userModel = new UserModel();
+require_once '../controllers/AuthController.php';
 
-if (isset($_SESSION['user_logged_in'])) {
-    header("Location: homepage.php");
-    exit;
-}
-
-$error = "";
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = $_POST['username'];
-    $password = $_POST['password'];
-
-    $user = $userModel->login($username, $password);
-
-    if ($user) {
-        $_SESSION['user_logged_in'] = true;
-        $_SESSION['user_id']  = $user['id'];      
-        $_SESSION['username'] = $user['username'];
-        $_SESSION['fullname'] = $user['fullname']; 
-        $_SESSION['role']     = $user['role'];
-
-        header("Location: homepage.php");
-        exit;
-    } else {
-        $error = "Username atau Password salah!";
-    }
-}
+$auth = new AuthController();
+$auth->checkLogin(); 
+$error = $auth->handleLogin(); 
 ?>
 
 <!DOCTYPE html>

@@ -1,40 +1,5 @@
 <?php
-session_start();
-
-if (!isset($_SESSION['user_logged_in'])) {
-    header("Location: login.php");
-    exit;
-}
-
-require_once '../models/CustomerModel.php';
-$model = new CustomerModel();
-
-if (isset($_POST['add_customer'])) {
-    $nama = $_POST['nama_pelanggan'];
-    $telp = $_POST['no_telepon'];
-    if($model->addCustomer($nama, $telp)){
-        echo "<script>alert('Pelanggan berhasil ditambahkan!'); window.location='customers.php';</script>";
-    }
-}
-
-if (isset($_POST['edit_customer'])) {
-    $id = $_POST['id_pelanggan'];
-    $nama = $_POST['nama_pelanggan'];
-    $telp = $_POST['no_telepon'];
-    if($model->updateCustomer($id, $nama, $telp)){
-        echo "<script>alert('Data pelanggan berhasil diupdate!'); window.location='customers.php';</script>";
-    }
-}
-
-if (isset($_GET['delete_id'])) {
-    $id = $_GET['delete_id'];
-    if($model->deleteCustomer($id)){
-        echo "<script>alert('Pelanggan berhasil dihapus (Soft Delete)!'); window.location='customers.php';</script>";
-    }
-}
-
-$search = $_GET['search'] ?? '';
-$customers = $model->getAllCustomers($search);
+    require_once '../controllers/CustomerController.php';
 ?>
 
 <!DOCTYPE html>

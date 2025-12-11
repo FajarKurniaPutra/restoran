@@ -20,7 +20,7 @@
         <div class="container-fluid py-5 bg-dark hero-header mb-5">
             <div class="container text-center my-5 pt-5 pb-4">
                 <h1 class="display-3 text-white mb-3">Order System</h1>
-                <p class="text-white">Transaction Management & Kitchen Display</p>
+                <p class="text-white">Kelola pesanan pelanggan</p>
             </div>
         </div>
 

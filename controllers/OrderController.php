@@ -1,27 +1,17 @@
 <?php
 session_start();
-
-if (!isset($_SESSION['user_logged_in'])) {
-    header("Location: login.php");
-    exit;
-}
+if (!isset($_SESSION['user_logged_in'])) { header("Location: login.php"); exit; }
 
 require_once '../models/OrderModel.php';
-require_once '../models/MenuModel.php'; 
 
 class OrderController {
     private $model;
-
-    public function __construct() {
-        $this->model = new OrderModel();
-    }
+    public function __construct() { $this->model = new OrderModel(); }
 
     public function handleRequest() {
-        $msg = "";
-        $msgClass = "";
+        $msg = ""; $msgClass = "";
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            
             if (isset($_POST['action']) && $_POST['action'] === 'create') {
                 $items = [];
                 if(isset($_POST['menu_id'])){
@@ -31,33 +21,33 @@ class OrderController {
                 }
                 
                 if(empty($items)) {
-                    $msg = "Gagal: Belum ada menu yang dipilih.";
-                    $msgClass = "alert-warning";
+                    $msg = "Gagal: Belum ada menu yang dipilih."; $msgClass = "alert-warning";
                 } else {
-                    $res = $this->model->createOrderTransaction($_POST['pelanggan_id'], $_POST['meja_id'], $items);
+                    $res = $this->model->createOrderTransaction($_POST['pelanggan_id'], $_POST['meja_id'], $items, $_POST['tipe_order']);
                     if ($res === true) {
-                        $msg = "Order Berhasil Dibuat (Transaction Commit)!";
-                        $msgClass = "alert-success";
+                        $msg = "Order Berhasil Dibuat!"; $msgClass = "alert-success";
                     } else {
-                        $msg = "Gagal: $res";
-                        $msgClass = "alert-danger";
+                        $msg = "Gagal: $res"; $msgClass = "alert-danger";
                     }
                 }
             }
 
             if (isset($_POST['action']) && $_POST['action'] === 'bayar') {
                 $result = $this->model->bayarOrder($_POST['id_pesanan'], $_POST['jumlah_bayar'], $_POST['metode']);
-                
                 if ($result['status'] === 'success') {
-                    $kembalianRp = number_format($result['kembalian'], 0, ',', '.');
-                    $msg = "<strong>PEMBAYARAN SUKSES!</strong><br>Kembalian: <span class='fs-4 fw-bold'>Rp $kembalianRp</span>";
+                    $msg = "PEMBAYARAN SUKSES! Kembalian: Rp " . number_format($result['kembalian']);
                     $msgClass = "alert-success";
-                } elseif ($result['status'] === 'warning') {
-                    $msg = "<strong>TRANSAKSI DITOLAK:</strong> " . $result['message'];
-                    $msgClass = "alert-danger"; 
                 } else {
-                    $msg = "Error: " . $result['message'];
-                    $msgClass = "alert-dark";
+                    $msg = $result['message']; $msgClass = "alert-danger";
+                }
+            }
+
+            if (isset($_POST['action']) && $_POST['action'] === 'cancel') {
+                if ($this->model->cancelOrder($_POST['id_pesanan'])) {
+                    $msg = "Order Berhasil Dibatalkan dan Meja Dikosongkan.";
+                    $msgClass = "alert-info";
+                } else {
+                    $msg = "Gagal membatalkan order."; $msgClass = "alert-danger";
                 }
             }
         }
@@ -70,8 +60,7 @@ class OrderController {
             'activeMenus' => $this->model->getActiveMenus(),
             'pelanggan' => $this->model->getPelanggan(),
             'meja' => $this->model->getMejaKosong(),
-            'orders' => $this->model->getPendingOrders(),
-            'explain' => isset($_GET['analyze']) ? $this->model->getExplainAnalyze($_GET['analyze']) : ""
+            'orders' => $this->model->getPendingOrders()
         ];
     }
 }
@@ -79,7 +68,5 @@ class OrderController {
 $controller = new OrderController();
 $status = $controller->handleRequest();
 $data = $controller->getData();
-
-extract($status);
-extract($data);
+extract($status); extract($data);
 ?>

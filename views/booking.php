@@ -130,7 +130,17 @@
                                                 <i class="fa fa-calendar-alt me-1"></i>
                                                 <?= date('d M - H:i', strtotime($r['tanggal_reservasi'].' '.$r['jam_reservasi'])) ?>
                                             </small>
-                                            <a href="?action=cancel_res&id=<?= $r['id'] ?>" onclick="return confirm('Yakin ingin membatalkan reservasi <?= htmlspecialchars($r['nama_pelanggan']) ?>?')" class="btn btn-sm btn-danger py-0" style="font-size: 0.75rem;">Batal</a>
+                                            <div class="d-flex gap-1">
+                                                <a href="?action=complete_res&id=<?= $r['id'] ?>" 
+                                                onclick="return confirm('Selesaikan reservasi ini? Meja akan otomatis dikosongkan.')" 
+                                                class="btn btn-sm btn-success py-0" 
+                                                style="font-size: 0.75rem;">Selesai</a>
+                                                
+                                                <a href="?action=cancel_res&id=<?= $r['id'] ?>" 
+                                                onclick="return confirm('Yakin ingin membatalkan reservasi <?= htmlspecialchars($r['nama_pelanggan']) ?>?')" 
+                                                class="btn btn-sm btn-danger py-0" 
+                                                style="font-size: 0.75rem;">Batal</a>
+                                            </div>
                                         </div>
                                     </div>
                                 <?php endforeach; endif; ?>

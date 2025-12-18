@@ -61,6 +61,10 @@ class BookingController {
                 $this->model->cancelReservasi($_GET['id']);
                 $_SESSION['notif'] = "Reservasi Dibatalkan.";
             }
+            if ($_GET['action'] == 'complete_res') {
+                $this->model->completeReservasi($_GET['id']);
+                $_SESSION['notif'] = "Reservasi Selesai. Meja kini kosong.";
+            }
             header("Location: booking.php"); exit;
         }
     }

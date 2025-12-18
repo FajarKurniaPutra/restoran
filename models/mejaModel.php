@@ -127,5 +127,24 @@ class MejaModel {
             return false;
         }
     }
+
+    public function completeReservasi($id) {
+        pg_query($this->db->conn, "BEGIN");
+        try {
+            $res = pg_query_params($this->db->conn, "SELECT meja_id FROM reservasi WHERE id=$1", [$id]);
+            $data = pg_fetch_assoc($res);
+            
+            if ($data) {
+                pg_query_params($this->db->conn, "UPDATE reservasi SET status='selesai' WHERE id=$1", [$id]);
+                pg_query_params($this->db->conn, "UPDATE meja SET status = 'kosong' WHERE id = $1", [$data['meja_id']]);
+            }
+
+            pg_query($this->db->conn, "COMMIT");
+            return true;
+        } catch (Exception $e) {
+            pg_query($this->db->conn, "ROLLBACK");
+            return false;
+        }
+    }
 }
 ?>

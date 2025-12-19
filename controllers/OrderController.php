@@ -56,11 +56,17 @@ class OrderController {
     }
 
     public function getData() {
+        $explain = "";
+        if (isset($_GET['analyze']) && !empty(trim($_GET['analyze']))) {
+            $explain = $this->model->getQueryPlan($_GET['analyze']);
+        }
+
         return [
             'activeMenus' => $this->model->getActiveMenus(),
             'pelanggan' => $this->model->getPelanggan(),
             'meja' => $this->model->getMejaKosong(),
-            'orders' => $this->model->getPendingOrders()
+            'orders' => $this->model->getPendingOrders(),
+            'explain' => $explain
         ];
     }
 }

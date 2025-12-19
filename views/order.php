@@ -215,8 +215,15 @@
                             <h4 class="text-primary mb-3"><i class="fa fa-tachometer-alt me-2"></i>Database Performance Analyzer</h4>
                             <p class="text-muted">Gunakan fitur ini untuk melihat bagaimana database melakukan pencarian data menu.</p>
                             <form method="GET" class="d-flex gap-2 mb-3">
-                                <input type="text" name="analyze" class="form-control" placeholder="Cari nama menu..." required>
+                                <input type="text" name="analyze" class="form-control" 
+                                    placeholder="Cari nama menu..." 
+                                    value="<?= htmlspecialchars($_GET['analyze'] ?? '') ?>" required>
                                 <button class="btn btn-dark fw-bold px-4">RUN EXPLAIN ANALYZE</button>
+                                <?php if(isset($_GET['analyze'])): ?>
+                                    <a href="order.php" class="btn btn-outline-secondary">
+                                        <i class="fa fa-sync"></i> Reset
+                                    </a>
+                                <?php endif; ?>
                             </form>
                             <?php if($explain): ?>
                                 <div class="bg-dark text-warning p-3 rounded font-monospace" style="font-size: 0.85rem; overflow-x: auto; border: 3px solid #fea116;">

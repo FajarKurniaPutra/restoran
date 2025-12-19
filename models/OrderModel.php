@@ -120,5 +120,15 @@ class OrderModel {
         $res = pg_query($this->db->conn, "SELECT * FROM meja WHERE status='kosong' ORDER BY nomor_meja");
         return pg_fetch_all($res) ?: [];
     }
+
+    public function getQueryPlan($keyword) {
+        $query = "EXPLAIN ANALYZE SELECT * FROM menu WHERE nama_menu ILIKE $1";
+        $result = pg_query_params($this->db->conn, $query, ["%$keyword%"]);
+        $plan = "";
+        while ($row = pg_fetch_assoc($result)) {
+            $plan .= $row['QUERY PLAN'] . "\n";
+        }
+        return $plan;
+    }
 }
 ?>
